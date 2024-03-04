@@ -1,5 +1,5 @@
 ---
-title: "Proyecto Final"
+title: "Proyecto Final - Curso SEE - Predicción en la Deserción de Clientes usando R"
 author: "Jaris Aizprúa Barrios"
 format: docx
 editor: visual
