@@ -1,6 +1,8 @@
 # Proyecto para predecir la deserción de clientes en una entidad bancaria.
 
-El dataset contiene las siguientes variables
+Realizado en RStudio y almacenado en formato Quarto.
+
+El dataset contiene las siguientes variables:
 
 * customer_id: Identificador único para cada cliente. Aparentemente, no se utiliza en el análisis.
 
