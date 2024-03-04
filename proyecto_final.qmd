@@ -496,27 +496,3 @@ metricas <- rbind(
     F1 = unname(cm$byClass['F1']),
     AUC = auc_valor))
 ```
-
-## Resumen de métricas y conclusiones
-El significado de cada métrica es el siguiente:
-* Modelo: Es el algoritmo utilizado para el entrenamiento y la predicción.
-* Precisión: Indica cuán frecuentemente las predicciones positivas del modelo son correctas.
-* Sensibilidad: También conocida como recall, es la proporción de positivos reales que se identificaron correctamente.
-* Especificidad: La proporción de negativos reales que se identificaron correctamente.
-* Pred_Positivo: Es la precisión de las predicciones positivas, también conocida como el valor predictivo positivo.
-* Pred_Negativo: Es la precisión de las predicciones negativas, conocido como valor predictivo negativo.
-* F1: Es el promedio armónico de la precisión y la sensibilidad. Da una idea del balance entre estas dos métricas.
-* AUC: Área Bajo la Curva ROC. Es una medida del rendimiento del modelo en términos de la capacidad de distinguir entre las clases.
-
-De la tabla resumen podemos hacer las siguientes observaciones:
-* El modelo de Random Forest con balanceo de datos parece tener el mejor rendimiento general, con el mayor AUC de 0.9201937, lo que indica una excelente capacidad de discriminación entre clases.
-* La Regresión Logística sin balanceo tiene la menor sensibilidad (0.3960720), lo que indica que no es tan buena identificando la clase positiva (deserción de clientes).
-* El Árbol de decisión con balanceo de datos muestra una mejora considerable en sensibilidad comparado con su versión sin balanceo, lo que sugiere que el balanceo de clases ha ayudado a identificar de mejor manera la clase positiva.
-* En términos de precisión, nuevamente el modelo de Random Forest con balanceo de datos sobresale con un valor de 0.9200000, indicando que las predicciones positivas son muy confiables.
-* La métrica F1 es bastante balanceada para todos los modelos con balanceo dedatos, lo cual es deseable en situaciones donde se busca un equilibrio entre precisión y sensibilidad.
-
-En resumen, si no hay restricciones específicas y se busca el mejor rendimiento en términos de obtener un equilibrio entre identificar positivos y negativos correctamente, el modelo de Random Forest con balanceo de datos es el mejor ya que tiene la más alta precisión, una excelente sensibilidad, y el AUC más alto, lo que indica que es muy bueno discriminando entre las clases; además, su valor F1 es alto, lo que sugiere un buen equilibrio entre precisión y sensibilidad.
-```{r}
-metricas
-```
-
