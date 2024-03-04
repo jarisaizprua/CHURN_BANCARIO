@@ -1,0 +1,522 @@
+---
+title: "Proyecto Final"
+author: "Jaris Aizprúa Barrios"
+format: docx
+editor: visual
+execute:
+  echo: true
+  warning: false
+  error: false
+---
+## Carga de librerías
+```{r}
+library(tidyverse) # manipulación de datos
+library(readxl) # cargar archivos excel
+library(GGally) # visualización de correlaciones
+library(skimr) # estadística univariada
+library(rpart) # árboles de decisión
+library(rpart.plot) # gráficos de árboles de decisión
+library(ROCR) # curvas ROC
+library(caret) # modelos de machine learning
+library(caTools) # división de los datos 
+library(e1071) # validación cruzada y ajuste de hiperparámetros
+library(pROC) # gráfico ROC
+library(randomForest) # modelos de random forest
+library(ROSE) # balanceo de datos
+library(glmnet) # modelos lineales generalizados
+```
+
+## Carga de datos
+```{r}
+datos_banco <- read_excel("Bank Churn.xlsx")
+```
+
+## Exploración de datos
+```{r}
+head(datos_banco)
+dim(datos_banco)
+str(datos_banco)
+summary(datos_banco) # no se muestran valores NA en el conjunto de datos
+```
+
+## Limpieza de datos
+```{r}
+# Convertir las variables tipo string a factor, y eliminar la variable de CUSTOMER_ID
+datos_banco <- datos_banco %>% 
+  mutate(country = as.factor(country),
+         gender = as.factor(gender),
+         products_number = as.factor(products_number),
+         credit_card = as.factor(credit_card),
+         active_member = as.factor(active_member),
+         churn = as.factor(churn)) %>% 
+    select(-customer_id)
+
+str(datos_banco)
+summary(datos_banco)
+```
+
+## Análisis de correlación
+Se verifica que no existe correlación entre las variables numéricas.
+```{r}
+datos_banco %>% 
+  select_if(is.numeric) %>% 
+  ggscatmat()
+```
+## Análisis de deserción
+### Análisis de deserción mediante la variable GENDER
+* Distribución de churn por género: Existe una diferencia en la cantidad de churn entre hombres y mujeres. En ambos géneros, hay más clientes que no han abandonado en comparación con los que sí lo han hecho.
+
+* Churn en mujeres: La cantidad de mujeres que no han abandonado es considerablemente mayor que la de las mujeres que han abandonado. Esto sugiere que la retención de mujeres en este conjunto de datos es relativamente alta.
+
+* Churn en hombres: Al igual que con las mujeres, la cantidad de hombres que no han abandonado es mayor que la de los hombres que sí lo han hecho. Sin embargo, la diferencia entre los hombres que se quedan y los que se van parece ser más marcada que en las mujeres.
+
+* Comparación entre géneros: Parece que hay una diferencia entre hombres y mujeres en términos de churn. Específicamente, parece haber una mayor proporción de hombres que no han abandonado en comparación con las mujeres.
+```{r}
+datos_banco %>%
+  ggplot(aes(x = churn, fill = churn)) +
+  geom_bar() +
+  facet_wrap(.~gender)
+```
+
+### Análisis de deserción mediante la variable COUNTRY
+* Distribución del churn en clientes de Francia: La barra roja, que representa a los clientes que no han abandonado, es considerablemente más alta que la barra azul de churn. Esto indica una tasa de retención alta en clientes de Francia.
+
+* Distribución del churn en clientes de Alemania: A diferencia de Francia, la diferencia entre los clientes que se han quedado y los que han abandonado de Alemania no es tan pronunciada. Sin embargo, sigue habiendo más clientes que no han abandonado en comparación con los que sí lo han hecho.
+
+* Distribución del churn en clientes de España: El patrón es similar al de Francia, con una cantidad significativamente mayor de clientes que no abandonan comparado con los que sí lo hacen.
+
+* Comparación entre los clientes de los 3 países: Al observar las tres barras para el churn 0, se puede apreciar que Francia tiene la mayor cantidad de clientes que no abandonan, seguido por Alemania y luego España. En cuanto al churn 1, la cantidad de clientes que abandonan de Alemania es proporcionalmente más alta en comparación con los otros dos países.
+```{r}
+datos_banco %>%
+  ggplot(aes(x = churn, fill = churn)) +
+  geom_bar() +
+  facet_wrap(.~country)
+```
+
+### Análisis de deserción mediante la variable PRODUCTS_NUMBER
+* Un producto (1): Hay una cantidad significativa de clientes con solo un producto que no han abandonado, pero la cifra de los que sí han abandonado también es notable. Esto puede sugerir que tener solo un producto con el banco podría estar asociado con un riesgo más alto de churn comparado con tener más productos.
+
+* Dos productos (2): Los clientes con dos productos presentan una alta tasa de retención, como lo indica la alta barra roja. La barra azul es mucho más pequeña, lo que indica una menor tasa de churn en este grupo.
+
+* Tres productos (3): Este grupo tiene una cantidad muy baja de churn, casi inexistente en comparación con los grupos de uno y dos productos.
+
+* Cuatro productos (4): Al igual que con el grupo de tres productos, el churn en el grupo de cuatro productos es extremadamente bajo.
+
+De lo anterior se puede inferir lo siguiente:
+
+* Los clientes con más productos financieros tienden a tener tasas de churn más bajas. Esto podría sugerir que cuanto más integrado está un cliente con los servicios del banco (es decir, cuantos más productos utiliza), menos probable es que abandone. Esto puede estar relacionado con una mayor satisfacción del cliente o con la inconveniencia de cambiar a otro banco cuando se tienen múltiples productos.
+
+* Hay una disminución marcada en el churn a medida que el número de productos aumenta de uno a dos, y especialmente a tres o cuatro, lo que indica una posible correlación entre la cantidad de productos que un cliente tiene y su lealtad o retención.
+```{r}
+datos_banco %>%
+  ggplot(aes(x = churn, fill = churn)) +
+  geom_bar() +
+  facet_wrap(.~products_number)
+```
+
+### Análisis de deserción mediante la variable CREDIT_CARD
+* Clientes sin tarjeta de crédito (0): La barra roja (clientes que no abandonan) es más alta que la barra azul (clientes que abandonan). Esto indica que entre los clientes sin tarjeta de crédito, hay una mayor cantidad de clientes que se quedan en comparación con los que abandonan.
+
+* Clientes con tarjeta de crédito (1): Se observa una tendencia similar, pero la diferencia entre los clientes que se quedan y los que abandonan es mucho más pronunciada en este grupo. La barra roja es considerablemente más alta que la barra azul, lo que sugiere que los clientes con tarjeta de crédito tienen una tasa de retención muy alta.
+
+* Comparación entre grupos: Comparando las barras rojas entre clientes con y sin tarjeta de crédito, parece que hay una mayor cantidad de clientes con tarjeta de crédito que no abandonan. Esto podría implicar que la posesión de una tarjeta de crédito está asociada con una menor probabilidad de churn.
+
+* Churn y tarjeta de crédito: En ambos grupos, hay más clientes que no abandonan que los que sí lo hacen, pero la proporción de clientes que se quedan frente a los que abandonan es mayor en el grupo de clientes con tarjeta de crédito.
+```{r}
+datos_banco %>%
+  ggplot(aes(x = churn, fill = churn)) +
+  geom_bar() +
+  facet_wrap(.~credit_card)
+```
+
+### Análisis de deserción mediante la variable ACTIVE_MEMBER
+* Clientes no activos (0): La barra roja, que representa a los clientes que no han abandonado (churn = 0), es más alta que la barra azul, que representa a los clientes que han abandonado (churn = 1). Esto indica que dentro del grupo de clientes no activos, hay más clientes que se quedan que los que abandonan, pero la diferencia no es tan grande como en el grupo de miembros activos.
+
+* Clientes activos (1): En el caso de los clientes activos, la barra roja es mucho más alta que la barra azul, lo que sugiere que hay una cantidad significativamente mayor de miembros activos que permanecen con el servicio en comparación con los que abandonan.
+
+De lo anterior se puede inferir lo siguiente:
+
+* La actividad del cliente parece estar asociada con una mayor retención: Los clientes activos muestran una tendencia mucho más fuerte a no abandonar en comparación con los no activos. Esto sugiere que la participación activa en los servicios o productos del banco es un factor importante para la retención del cliente.
+
+* Posible enfoque para la retención de clientes: Para reducir el churn, una estrategia podría ser aumentar la actividad de los clientes, quizás a través de programas de recompensas, beneficios adicionales o comunicaciones personalizadas que fomenten un mayor uso de los servicios del banco.
+```{r}
+datos_banco %>%
+  ggplot(aes(x = churn, fill = churn)) +
+  geom_bar() +
+  facet_wrap(.~active_member)
+```
+### Análisis de deserción mediante la variable ESTIMATED_SALARY
+* Mediana de Salarios: Ambos grupos tienen medianas de salario similares, como se indica por las líneas horizontales dentro de las cajas.
+
+* Dispersión de Salarios: La dispersión de salarios (como se muestra por el IQR) es similar en ambos grupos, lo que sugiere que la variabilidad del salario entre los clientes es comparable independientemente de si abandonaron o no.
+
+* Valores Atípicos: No se observan valores atípicos claros en ninguno de los dos grupos, lo que indica que no hay salarios extremadamente altos o bajos que se desvíen significativamente de la mayoría de los datos.
+
+* Similitud entre Grupos: No hay diferencias notables en las distribuciones de salarios entre los clientes que abandonaron y los que no lo hicieron. Esto podría sugerir que, en términos de salario estimado, no hay una distinción clara que separe a los dos grupos.
+```{r}
+datos_banco %>% 
+  ggplot(aes(x = churn, y = estimated_salary, fill = churn)) +
+  geom_boxplot() +
+  labs(x = "Churn", y = "Estimated_Salary")
+```
+
+### Análisis de deserción mediante la variable BALANCE
+* Mediana del Saldo: La línea negra dentro de cada caja muestra la mediana del saldo. La mediana parece ser similar entre los dos grupos, lo que indica que el punto medio del saldo en la cuenta es aproximadamente el mismo tanto para los clientes que abandonaron como para los que no.
+
+* Rango Intercuartílico (IQR): El IQR es más amplio en el grupo de churn 0 en comparación con el grupo de churn 1, lo que sugiere que hay una mayor variabilidad en los saldos de los clientes que se quedan. Esto podría interpretarse como que los clientes que se quedan tienen diferencias más significativas en sus saldos, mientras que los saldos de los clientes que abandonan tienden a ser más homogéneos.
+
+* Valores Extremos: Ambos grupos muestran valores extremos, como se indica por las líneas que se extienden desde la caja. Sin embargo, el grupo churn 0 tiene valores extremos más altos, lo que sugiere que los clientes con saldos muy altos tienden a no abandonar.
+
+* Simetría de las Cajas: La caja para churn 0 parece ser más simétrica alrededor de la mediana que la caja para churn 1, lo que puede indicar una distribución más uniforme de los saldos en el grupo de clientes que no abandonan.
+
+* Comparación entre Grupos: No hay diferencias drásticas en la mediana de saldos entre los clientes que abandonan y los que no lo hacen, pero los clientes que no abandonan tienen una mayor dispersión de saldos. Esto podría significar que tener un saldo más alto no necesariamente disuade el churn, aunque los clientes con los saldos más altos parecen permanecer.
+
+Este análisis sugiere que podría haber una relación entre el saldo en la cuenta del cliente y la probabilidad de churn, con clientes de saldo más alto mostrando una tendencia a permanecer con la empresa.
+```{r}
+datos_banco %>% 
+  ggplot(aes(x = churn, y = balance, fill = churn)) +
+  geom_boxplot() +
+  labs(x = "Churn", y = "Balance")
+```
+
+### Análisis de deserción mediante la variable CREDIT_SCORE
+* Mediana de la Puntuación de Crédito: La mediana, representada por la línea negra en el centro de las cajas, es ligeramente más alta para los clientes que no han abandonado (churn 0) en comparación con los que sí lo han hecho (churn 1). Esto sugiere que los clientes con una puntuación de crédito más alta tienden a quedarse.
+
+* Rango Intercuartílico (IQR): El IQR, que es la altura de la caja, parece ser similar para ambos grupos, indicando que la variabilidad de la puntuación de crédito es comparable entre los clientes que se quedan y los que abandonan.
+
+* Valores Atípicos: Existen algunos valores atípicos en el grupo de clientes que han abandonado (churn 1), lo que indica que hay algunos clientes con puntuaciones de crédito muy bajas que abandonaron. No hay valores atípicos aparentes en el grupo de clientes que no abandonaron.
+
+* Análisis de Distribución: Ambas distribuciones parecen ser simétricas alrededor de sus medianas. Sin embargo, el grupo de churn 1 tiene un rango ligeramente más amplio, lo que sugiere que hay más variabilidad en las puntuaciones de crédito entre los clientes que abandonaron.
+
+* Posibles Implicaciones: La presencia de valores atípicos bajos en el grupo de churn 1 podría implicar que las puntuaciones de crédito extremadamente bajas podrían estar asociadas con una mayor probabilidad de abandono. Sin embargo, la diferencia en las medianas no parece ser considerable, lo que sugiere que la puntuación de crédito por sí sola no es un indicador fuerte del churn.
+```{r}
+datos_banco %>% 
+  ggplot(aes(x = churn, y = credit_score, fill = churn)) +
+  geom_boxplot() +
+  labs(x = "Churn", y = "Credit_Score")
+```
+
+## Modelamiento - Sin balanceo de datos
+### División de los datos
+```{r}
+set.seed(123)
+split_indice <- sample.split(datos_banco$churn, SplitRatio = 0.7) #70% para entrenamiento, 30% para pruebas
+
+datos_entrenamiento <- datos_banco %>% 
+  subset(split_indice == TRUE)
+
+datos_prueba <- datos_banco %>% 
+  subset(split_indice == FALSE)
+```
+
+### Árboles de decisión
+#### Entrenamiento del modelo
+```{r}
+# seleccionar todas las variables para el modelo
+modelo_arbol_decision <- rpart(churn~., data = datos_entrenamiento, method = "class")
+
+# graficar el árbol de decisión
+rpart.plot(modelo_arbol_decision)
+
+# obtener la importancia de cada variable en el modelo
+importancias <- modelo_arbol_decision$variable.importance
+
+# convertir a dataframe y ordenar de mayor a menor
+var_importance_df <- importancias %>%
+  as.data.frame() %>% 
+  rename(MeanDecreaseGini = ".") %>% 
+  arrange(desc(MeanDecreaseGini))
+
+var_importance_df
+```
+
+#### Validación del modelo
+```{r}
+# validación del modelo
+pred_arbol_decision <- predict(modelo_arbol_decision, datos_prueba, type = "class")
+
+# matriz de confusión
+confusionMatrix(pred_arbol_decision, datos_prueba$churn, positive = "1")
+cm <- confusionMatrix(pred_arbol_decision, datos_prueba$churn, positive = "1")
+fourfoldplot(cm$table, color = c("#CC6666", "#99CC99"), conf.level = 0, margin = 1, main = "Matriz de Confusión")
+
+# curva roc y área auc
+curva_roc <- roc(datos_prueba$churn, as.numeric(pred_arbol_decision))
+auc_valor <- auc(curva_roc)
+plot(curva_roc, main = paste("Curva ROC con AUC =", round(auc_valor, 2)), col = "blue")
+
+# almacenar métricas en dataframe para realizar comparación final
+metricas <- data.frame(
+  Modelo = "Arbol de decisión (sin balanceo)",
+  Precision = unname(cm$overall['Accuracy']),
+  Sensibilidad = unname(cm$byClass['Sensitivity']),
+  Especificidad = unname(cm$byClass['Specificity']),
+  Pred_Positivo = unname(cm$byClass['Pos Pred Value']),
+  Pred_Negativo = unname(cm$byClass['Neg Pred Value']),
+  F1 = unname(cm$byClass['F1']),
+  AUC = auc_valor)
+```
+
+### Random Forest
+#### Entrenamiento del modelo
+```{r}
+# seleccionar todas las variables para el modelo
+modelo_random_forest <- randomForest(churn~., data = datos_entrenamiento, ntree = 500)
+
+# obtener la importancia de cada variable en el modelo
+var_importance <- importance(modelo_random_forest)
+
+# convertir a dataframe y ordenar de mayor a menor
+var_importance_df <- var_importance %>% 
+  as.data.frame() %>% 
+  arrange(desc(MeanDecreaseGini))
+
+var_importance_df
+```
+
+#### Validación del modelo
+```{r}
+# validación del modelo
+pred_random_forest <- predict(modelo_random_forest, newdata = datos_prueba)
+
+# matriz de confusión
+confusionMatrix(pred_random_forest, datos_prueba$churn, positive = "1")
+cm <- confusionMatrix(pred_random_forest, datos_prueba$churn, positive = "1")
+fourfoldplot(cm$table, color = c("#CC6666", "#99CC99"), conf.level = 0, margin = 1, main = "Matriz de Confusión")
+
+# curva roc y área auc
+curva_roc <- roc(datos_prueba$churn, as.numeric(pred_random_forest))
+auc_valor <- auc(curva_roc)
+plot(curva_roc, main = paste("Curva ROC con AUC =", round(auc_valor, 2)), col = "blue")
+
+# almacenar métricas en dataframe para realizar comparación final
+metricas <- rbind(
+  metricas, data.frame(
+    Modelo = "Random Forest (sin balanceo)",
+    Precision = unname(cm$overall['Accuracy']),
+    Sensibilidad = unname(cm$byClass['Sensitivity']),
+    Especificidad = unname(cm$byClass['Specificity']),
+    Pred_Positivo = unname(cm$byClass['Pos Pred Value']),
+    Pred_Negativo = unname(cm$byClass['Neg Pred Value']),
+    F1 = unname(cm$byClass['F1']),
+    AUC = auc_valor))
+```
+
+### Regresión Logística
+#### Entrenamiento del modelo
+```{r}
+# seleccionar todas las variables para el modelo
+modelo_regresion_logistica <- glm(churn~., data = datos_entrenamiento, family = "binomial")
+```
+
+#### Validación del modelo
+```{r}
+# validación del modelo
+pred_regresion_logistica <- predict(modelo_regresion_logistica, newdata = datos_prueba, type = "response")
+
+# transformar los datos para generar la matriz de confusión
+predicted_classes_reg_log <- ifelse(pred_regresion_logistica > 0.5, "1", "0")
+class(predicted_classes_reg_log)
+class(datos_banco$churn)
+predicted_classes_reg_log <- as.factor(predicted_classes_reg_log)
+
+# matriz de confusión
+confusionMatrix(predicted_classes_reg_log, datos_prueba$churn, positive = "1")
+cm <- confusionMatrix(predicted_classes_reg_log, datos_prueba$churn, positive = "1")
+fourfoldplot(cm$table, color = c("#CC6666", "#99CC99"), conf.level = 0, margin = 1, main = "Matriz de Confusión")
+
+# curva roc
+curva_roc <- roc(datos_prueba$churn, as.numeric(predicted_classes_reg_log))
+auc_valor <- auc(curva_roc)
+plot(curva_roc, main = paste("Curva ROC con AUC =", round(auc_valor, 2)), col = "blue")
+
+# almacenar métricas en dataframe para realizar comparación final
+metricas <- rbind(
+  metricas, data.frame(
+    Modelo = "Regresión Logística (sin balanceo)",
+    Precision = unname(cm$overall['Accuracy']),
+    Sensibilidad = unname(cm$byClass['Sensitivity']),
+    Especificidad = unname(cm$byClass['Specificity']),
+    Pred_Positivo = unname(cm$byClass['Pos Pred Value']),
+    Pred_Negativo = unname(cm$byClass['Neg Pred Value']),
+    F1 = unname(cm$byClass['F1']),
+    AUC = auc_valor))
+```
+
+## Modelamiento - Con balanceo de datos
+### Balance y división de los datos
+```{r}
+# balancear los datos mediante sobremuestreo y submuestreo
+datos_balanceados <- ovun.sample(churn~., data= datos_banco, method = "both", seed = 123)
+
+# extraer datos y asignar en dataframe
+datos_balanceados_df <- datos_balanceados$data
+
+# división de los datos
+split_indices <- sample.split(datos_balanceados_df$churn, SplitRatio = 0.7)
+
+datos_entrenamiento <- datos_balanceados_df %>% 
+  subset(split_indices == TRUE)
+
+datos_prueba <- datos_balanceados_df %>% 
+  subset(split_indices == FALSE)
+```
+
+### Árboles de decisión
+#### Entrenamiento del modelo
+```{r}
+# seleccionar todas las variables para el modelo
+modelo_arbol_decision <- rpart(churn~., data = datos_entrenamiento, method = "class")
+
+# graficar el árbol de decisión
+rpart.plot(modelo_arbol_decision)
+
+# obtener la importancia de cada variable en el modelo
+importancias <- modelo_arbol_decision$variable.importance
+
+# convertir a dataframe y ordenar de mayor a menor
+var_importance_df <- importancias %>%
+  as.data.frame() %>% 
+  rename(MeanDecreaseGini = ".") %>% 
+  arrange(desc(MeanDecreaseGini))
+
+var_importance_df
+```
+
+#### Validación del modelo
+```{r}
+# validación del modelo
+pred_arbol_decision <- predict(modelo_arbol_decision, datos_prueba, type = "class")
+
+# matriz de confusión
+confusionMatrix(pred_arbol_decision, datos_prueba$churn, positive = "1")
+cm <- confusionMatrix(pred_arbol_decision, datos_prueba$churn, positive = "1")
+fourfoldplot(cm$table, color = c("#CC6666", "#99CC99"), conf.level = 0, margin = 1, main = "Matriz de Confusión")
+
+# curva roc y área auc
+curva_roc <- roc(datos_prueba$churn, as.numeric(pred_arbol_decision))
+auc_valor <- auc(curva_roc)
+plot(curva_roc, main = paste("Curva ROC con AUC =", round(auc_valor, 2)), col = "blue")
+
+# almacenar métricas en dataframe para realizar comparación final
+metricas <- rbind(
+  metricas, data.frame(
+    Modelo = "Árbol de decisión (con balanceo)",
+    Precision = unname(cm$overall['Accuracy']),
+    Sensibilidad = unname(cm$byClass['Sensitivity']),
+    Especificidad = unname(cm$byClass['Specificity']),
+    Pred_Positivo = unname(cm$byClass['Pos Pred Value']),
+    Pred_Negativo = unname(cm$byClass['Neg Pred Value']),
+    F1 = unname(cm$byClass['F1']),
+    AUC = auc_valor))
+```
+
+### Random Forest
+#### Entrenamiento del modelo
+```{r}
+# seleccionar todas las variables para el modelo
+modelo_random_forest <- randomForest(churn~., data = datos_entrenamiento, ntree = 500)
+
+# obtener la importancia de cada variable en el modelo
+var_importance <- importance(modelo_random_forest)
+
+# convertir a dataframe y ordenar de mayor a menor
+var_importance_df <- var_importance %>% 
+  as.data.frame() %>% 
+  arrange(desc(MeanDecreaseGini))
+
+var_importance_df
+```
+
+#### Validación del modelo
+```{r}
+# validación del modelo
+pred_random_forest <- predict(modelo_random_forest, newdata = datos_prueba)
+
+# matriz de confusión
+confusionMatrix(pred_random_forest, datos_prueba$churn, positive = "1")
+cm <- confusionMatrix(pred_random_forest, datos_prueba$churn, positive = "1")
+fourfoldplot(cm$table, color = c("#CC6666", "#99CC99"), conf.level = 0, margin = 1, main = "Matriz de Confusión")
+
+# curva roc y área auc
+curva_roc <- roc(datos_prueba$churn, as.numeric(pred_random_forest))
+auc_valor <- auc(curva_roc)
+plot(curva_roc, main = paste("Curva ROC con AUC =", round(auc_valor, 2)), col = "blue")
+
+# almacenar métricas en dataframe para realizar comparación final
+metricas <- rbind(
+  metricas, data.frame(
+    Modelo = "Random Forest (con balanceo)",
+    Precision = unname(cm$overall['Accuracy']),
+    Sensibilidad = unname(cm$byClass['Sensitivity']),
+    Especificidad = unname(cm$byClass['Specificity']),
+    Pred_Positivo = unname(cm$byClass['Pos Pred Value']),
+    Pred_Negativo = unname(cm$byClass['Neg Pred Value']),
+    F1 = unname(cm$byClass['F1']),
+    AUC = auc_valor))
+```
+
+### Regresión Logística
+#### Entrenamiento del modelo
+```{r}
+# seleccionar todas las variables para el modelo
+modelo_regresion_logistica <- glm(churn~., data = datos_entrenamiento, family = "binomial")
+```
+
+#### Validación del modelo
+```{r}
+# validación del modelo
+pred_regresion_logistica <- predict(modelo_regresion_logistica, newdata = datos_prueba, type = "response")
+
+# transformar los datos para generar la matriz de confusión
+predicted_classes_reg_log <- ifelse(pred_regresion_logistica > 0.5, "1", "0")
+class(predicted_classes_reg_log)
+class(datos_banco$churn)
+predicted_classes_reg_log <- as.factor(predicted_classes_reg_log)
+
+# matriz de confusión
+confusionMatrix(predicted_classes_reg_log, datos_prueba$churn, positive = "1")
+cm <- confusionMatrix(predicted_classes_reg_log, datos_prueba$churn, positive = "1")
+fourfoldplot(cm$table, color = c("#CC6666", "#99CC99"), conf.level = 0, margin = 1, main = "Matriz de Confusión")
+
+# curva roc
+curva_roc <- roc(datos_prueba$churn, as.numeric(predicted_classes_reg_log))
+auc_valor <- auc(curva_roc)
+plot(curva_roc, main = paste("Curva ROC con AUC =", round(auc_valor, 2)), col = "blue")
+
+# almacenar métricas en dataframe para realizar comparación final
+metricas <- rbind(
+  metricas, data.frame(
+    Modelo = "Regresión Logística (con balanceo)",
+    Precision = unname(cm$overall['Accuracy']),
+    Sensibilidad = unname(cm$byClass['Sensitivity']),
+    Especificidad = unname(cm$byClass['Specificity']),
+    Pred_Positivo = unname(cm$byClass['Pos Pred Value']),
+    Pred_Negativo = unname(cm$byClass['Neg Pred Value']),
+    F1 = unname(cm$byClass['F1']),
+    AUC = auc_valor))
+```
+
+## Resumen de métricas y conclusiones
+El significado de cada métrica es el siguiente:
+* Modelo: Es el algoritmo utilizado para el entrenamiento y la predicción.
+* Precisión: Indica cuán frecuentemente las predicciones positivas del modelo son correctas.
+* Sensibilidad: También conocida como recall, es la proporción de positivos reales que se identificaron correctamente.
+* Especificidad: La proporción de negativos reales que se identificaron correctamente.
+* Pred_Positivo: Es la precisión de las predicciones positivas, también conocida como el valor predictivo positivo.
+* Pred_Negativo: Es la precisión de las predicciones negativas, conocido como valor predictivo negativo.
+* F1: Es el promedio armónico de la precisión y la sensibilidad. Da una idea del balance entre estas dos métricas.
+* AUC: Área Bajo la Curva ROC. Es una medida del rendimiento del modelo en términos de la capacidad de distinguir entre las clases.
+
+De la tabla resumen podemos hacer las siguientes observaciones:
+* El modelo de Random Forest con balanceo de datos parece tener el mejor rendimiento general, con el mayor AUC de 0.9201937, lo que indica una excelente capacidad de discriminación entre clases.
+* La Regresión Logística sin balanceo tiene la menor sensibilidad (0.3960720), lo que indica que no es tan buena identificando la clase positiva (deserción de clientes).
+* El Árbol de decisión con balanceo de datos muestra una mejora considerable en sensibilidad comparado con su versión sin balanceo, lo que sugiere que el balanceo de clases ha ayudado a identificar de mejor manera la clase positiva.
+* En términos de precisión, nuevamente el modelo de Random Forest con balanceo de datos sobresale con un valor de 0.9200000, indicando que las predicciones positivas son muy confiables.
+* La métrica F1 es bastante balanceada para todos los modelos con balanceo dedatos, lo cual es deseable en situaciones donde se busca un equilibrio entre precisión y sensibilidad.
+
+En resumen, si no hay restricciones específicas y se busca el mejor rendimiento en términos de obtener un equilibrio entre identificar positivos y negativos correctamente, el modelo de Random Forest con balanceo de datos es el mejor ya que tiene la más alta precisión, una excelente sensibilidad, y el AUC más alto, lo que indica que es muy bueno discriminando entre las clases; además, su valor F1 es alto, lo que sugiere un buen equilibrio entre precisión y sensibilidad.
+```{r}
+metricas
+```
+
